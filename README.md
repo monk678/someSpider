@@ -9,7 +9,7 @@
 > 具体教程请点击我的博客 http://www.siyuanblog.com/?p=1291 
 
 
-### baiduimage_spider.py
+### baiduImageSpider.py
 > #### 爬取百度图片
 >
 > 根据关键字爬取百度图片，基于python3，个人学习开发用 提高了爬虫的容错率、稳定性 单线程爬取百度图片结果
