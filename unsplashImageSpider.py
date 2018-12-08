@@ -17,14 +17,18 @@ import os
 import datetime
 import threading
 import time
+from multiprocessing import Pool
+from retry import retry
+
+fileSaveBasePath = './unsplashImageSpider/'
 
 
 # type表示翻译类型
 # type=1表示中文翻译为英文
 # type=2表示英文翻译为中文
 def Chinese2English(word='朋友', type=1):
-    appid = '***'  # 你的appid
-    secretKey = '***'  # 你的密钥
+    appid = '20180901000201564'  # 你的appid
+    secretKey = 'fV2gfeIQtEEVgol3PJ9R'  # 你的密钥
 
     httpClient = None
     myurl = '/api/trans/vip/translate'
@@ -75,6 +79,7 @@ def judgeLanguageType(word):
 
 
 # 根据URL地址，文件名，文件存储路径下载文件
+@retry(tries=5, delay=1, backoff=2, max_delay=8, jitter=1)
 def saveFile(path, file_name, url):
     if not os.path.exists(os.path.join(path, file_name)):
         data = requests.get(url).content
@@ -111,7 +116,7 @@ def getImg(wordEnglish='boy', wordChinese='男孩', pageNum=1):
         querystring = {"query": '%s' % wordEnglish, "page": "%s" % page, "per_page": "30"}
         response = requests.request("GET", url, headers=headers, params=querystring)
         responseData = response.text
-        print(responseData)
+        # print(responseData)
 
         pageNum = min(int(pageNum), int(json.loads(responseData)['total_pages']))
         responseDatas = json.loads(responseData)['results']
@@ -126,18 +131,16 @@ def getImg(wordEnglish='boy', wordChinese='男孩', pageNum=1):
             imgUrl = img['urls']
             # print('关键词：%s_%s>>页面:%s爬取线程%s>>标题：%s' % (wordChinese, wordEnglish, page, arg, imgDescription))
 
-            fileSavePath = './img/%s_%s' % (wordChinese, wordEnglish)
+            fileSavePath = os.path.join(fileSaveBasePath, '%s_%s') % (wordChinese, wordEnglish)
             fileSaveName = '%s_%s_%s.jpg' % (wordChinese, wordEnglish, imgDescription)
-            try:
-                # 图片从大到小尺寸：raw,full,regular,small,thumb
-                saveFile(path=fileSavePath, file_name=fileSaveName, url=imgUrl['regular'])
-            except TypeError:
-                pass
+
+            # 图片从大到小尺寸：raw,full,regular,small,thumb
+            saveFile(path=fileSavePath, file_name=fileSaveName, url=imgUrl['regular'])
             endtime = datetime.datetime.now()
-            print('###关键词：%s_%s>>页面%s线程%s耗时：%s' % (wordChinese, wordEnglish, page, arg, endtime - startime))
+            print('###关键词：%s_%s>>页面%s图片%s耗时：%s' % (wordChinese, wordEnglish, page, arg, endtime - startime))
 
         for i in range(len(responseDatas)):
-            print('*******关键词：%s_%s页面%s正在启动线程%s' % (wordChinese, wordEnglish, page, i))
+            # print('*******关键词：%s_%s页面%s正在启动线程%s' % (wordChinese, wordEnglish, page, i))
             time.sleep(1)
             t = threading.Thread(target=action, args=(i,))
             t.start()
@@ -155,9 +158,20 @@ def spiderPageNum(keywords):
 
 if __name__ == '__main__':
     keywords = input('请输入要下载的关键字(使用空格分开关键字): ').split(' ')
+    print('共有%s个关键字' % str(len(keywords)))
     pageNum = spiderPageNum(keywords)
 
-    for keyword in keywords:
+
+    def getImgByWord(keyword):
         wordEnglish, wordChinese = judgeLanguageType(word=keyword)
         getImg(wordEnglish=wordEnglish, wordChinese=wordChinese, pageNum=pageNum)
         print('\n>>>>>>>>>>关键词：%s爬取完毕！\n' % keyword)
+
+
+    p = Pool(8)
+    for i in keywords:
+        p.apply_async(getImgByWord, args=(i,))
+    print('Waiting for all subprocesses done...')
+    p.close()
+    p.join()
+    print('All subprocesses done.')
